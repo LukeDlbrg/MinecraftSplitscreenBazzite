@@ -12,7 +12,30 @@
 #
 # =============================================================================
 
+# isBazziteEnvironment: Check if running on Bazzite
+# Returns 0 if on Bazzite, 1 otherwise
+# Note: Installation always happens in desktop mode, so we only check for desktop indicators
+isBazziteEnvironment() {
+    # 1. Primary: Check /etc/os-release for Bazzite
+    if [ -f "/etc/os-release" ] && grep -Ei 'Bazzite|bazzite' /etc/os-release >/dev/null; then
+        return 0
+    fi
+    
+    # 2. Fallback: Check XDG_SESSION_DESKTOP
+    if [ "${XDG_SESSION_DESKTOP:-}" = "bazzite" ]; then
+        return 0
+    fi
+    
+    # 3. Fallback: Check for bazzite-session process
+    if pgrep -x 'bazzite-session' >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
 # setup_steam_integration: Add Minecraft Splitscreen launcher to Steam library
+# This is optional on all platforms, including Bazzite
 #
 # STEAM INTEGRATION BENEFITS:
 # - Launch directly from Steam's game library interface
@@ -35,16 +58,27 @@
 # - Creates backup before modifications
 # - Uses official Steam binary format handling
 # - Handles multiple Steam installation types (native, Flatpak)
+# - On Bazzite: Optional with a note that it's not required
 setup_steam_integration() {
+    # Skip if Steam is not installed
+    if ! command -v steam >/dev/null 2>&1; then
+        print_info "Steam not installed - skipping Steam integration."
+        return 0
+    fi
+
     print_header "🎯 STEAM INTEGRATION SETUP"
+    
+    # On Bazzite, add a note that Steam integration is optional
+    if isBazziteEnvironment; then
+        print_info "Bazzite detected. Steam integration is optional (Bazzite works without Steam)."
+    fi
     
     # =============================================================================
     # STEAM INTEGRATION USER PROMPT
     # =============================================================================
     
     # USER PREFERENCE GATHERING: Ask if they want Steam integration
-    # Steam integration is optional but highly recommended for Steam Deck users
-    # Desktop users may prefer to launch manually or from application menu
+    # Steam integration is optional on all platforms
     print_info "Steam integration adds Minecraft Splitscreen to your Steam library."
     print_info "Benefits: Easy access from Steam, Big Picture mode support, Steam Deck Game Mode integration"
     echo ""
@@ -55,9 +89,9 @@ setup_steam_integration() {
         # LAUNCHER PATH DETECTION AND CONFIGURATION
         # =============================================================================
         
-        # Use PolyMC path signature for duplicate detection.
-        local launcher_path="local/share/PolyMC/minecraft"
-        print_info "Configuring Steam integration for PolyMC"
+        # Use Prism Launcher path signature for duplicate detection.
+        local launcher_path="local/share/PrismLauncher/minecraft"
+             print_info "Configuring Steam integration for Prism Launcher"
         
         # =============================================================================
         # DUPLICATE SHORTCUT PREVENTION
@@ -198,7 +232,7 @@ setup_steam_integration() {
             fi
 
             if [[ -s "$steam_script_temp" ]] || \
-               curl -sSL https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/add-to-steam.py -o "$steam_script_temp" 2>/dev/null; then
+                curl -sSL https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/add-to-steam.py -o "$steam_script_temp" 2>/dev/null; then
                 print_info "   → Executing Steam integration script..."
                 # Execute the downloaded script with proper error handling
                 if python3 "$steam_script_temp" 2>/dev/null; then
@@ -208,7 +242,7 @@ setup_steam_integration() {
                 else
                     print_warning "⚠️  Steam integration script encountered errors"
                     print_info "   → You may need to add the shortcut manually"
-                    print_info "   → Common causes: PolyMC not found, Steam not installed, or permissions issues"
+                    print_info "   → Common causes: Prism Launcher not found, Steam not installed, or permissions issues"
                 fi
             else
                 print_warning "⚠️  Failed to download Steam integration script"

@@ -1,9 +1,9 @@
-# Minecraft Splitscreen Steam Deck & Linux Installer
+# Minecraft Splitscreen Handheld / Bazzite Installer
 
-Simple installer for running **Minecraft splitscreen (1–4 players)** on Steam Deck and Linux using **PolyMC**.
+Simple installer for running **Minecraft splitscreen (1–4 players)** on **Steam Deck, and other handheld devices optimized for Bazzite** using **Prism Launcher**.
 
 ## What This Does
-- Installs/updates PolyMC in `~/.local/share/PolyMC`
+- Detects or installs **Prism Launcher** (supports both **AppImage** and **Flatpak**)
 - Creates 4 splitscreen instances (`latestUpdate-1` to `latestUpdate-4`)
 - Installs Fabric and required splitscreen mods
 - Lets you choose optional compatible mods
@@ -28,35 +28,52 @@ Simple installer for running **Minecraft splitscreen (1–4 players)** on Steam 
 - [Sodium Extras](https://modrinth.com/mod/sodium-extras)
 
 ## Requirements
-- Linux (Steam Deck or desktop Linux)
+- Linux (Bazzite, Steam Deck, ROG Ally, Lenovo Legion Go, or desktop Linux)
 - Internet connection for install/update
 - `bash`, `curl` or `wget`, and `jq`
 - Python 3 only if you want automatic Steam shortcut integration
+- `flatpak` (only if using Flatpak installation option)
 
 No manual Java setup is required. The installer detects and installs the needed Java version automatically.
 
 ## Install
+
+### Option 1: Auto-Detection (Recommended)
+The installer will automatically detect if Prism Launcher is already installed (Flatpak or AppImage) and use it:
 ```sh
-wget https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/install-minecraft-splitscreen.sh
+wget https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/install-minecraft-splitscreen.sh
 chmod +x install-minecraft-splitscreen.sh
 ./install-minecraft-splitscreen.sh
+```
+
+### Option 2: Force Flatpak Installation
+Use this if you want to use Prism Launcher via Flatpak (will install it automatically if missing):
+```sh
+./install-minecraft-splitscreen.sh --launcher flatpak
+```
+
+### Option 3: Force AppImage Installation
+Use this if you want to download and use Prism Launcher as an AppImage:
+```sh
+./install-minecraft-splitscreen.sh --launcher appimage
 ```
 
 ### Debug Mode
 Use this if you want verbose logs:
 ```sh
 ./install-minecraft-splitscreen.sh --debug
+./install-minecraft-splitscreen.sh --launcher flatpak --debug
 ```
 
 ## How Installation Works
-1. Downloads/updates PolyMC
+1. **Detects or installs Prism Launcher** (AppImage or Flatpak based on your choice)
 2. Lets you pick a compatible Minecraft version
 3. Detects/installs the correct Java version
 4. Checks mod compatibility and lets you choose optional mods
 5. Optionally accepts custom mods (URL/ID), validates compatibility, and warns about risk
-6. Creates/updates 4 manual PolyMC instances with Fabric
+6. Creates/updates 4 manual Prism Launcher instances with Fabric
 7. Installs mods and dependencies
-8. Optionally adds Steam + desktop shortcuts
+8. Optionally adds Steam + desktop shortcuts (Steam integration is optional on Bazzite)
 
 ### Custom Mod Input Formats
 - Easiest CurseForge format: paste only the numeric project ID (example: `422301`)
@@ -75,17 +92,31 @@ Minecraft version selection is list-based (no manual custom version entry).
 If a custom mod is incompatible, you can choose to switch versions and the installer will show only versions that support both core mods and that requested custom mod.
 
 ## Launching
-After install, run:
+After install, run the splitscreen launcher script:
+
+### For Flatpak Installation:
 ```sh
-~/.local/share/PolyMC/minecraftSplitscreen.sh
+~/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher/minecraftSplitscreen.sh
+```
+
+### For AppImage Installation:
+```sh
+~/.local/share/PrismLauncher/minecraftSplitscreen.sh
 ```
 
 You can also launch from Steam or desktop if you enabled those integrations.
 
 ## Install Locations
-- Main directory: `~/.local/share/PolyMC/`
-- Splitscreen launcher: `~/.local/share/PolyMC/minecraftSplitscreen.sh`
-- Instances: `~/.local/share/PolyMC/instances/`
+
+### For Flatpak Installation:
+- Main directory: `~/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher/`
+- Splitscreen launcher: `~/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher/minecraftSplitscreen.sh`
+- Instances: `~/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher/instances/`
+
+### For AppImage Installation:
+- Main directory: `~/.local/share/PrismLauncher/`
+- Splitscreen launcher: `~/.local/share/PrismLauncher/minecraftSplitscreen.sh`
+- Instances: `~/.local/share/PrismLauncher/instances/`
 
 ## Updating
 Re-run the installer anytime:
@@ -101,15 +132,17 @@ The installer updates instance configs and mods for the version you select, whil
 
 ## Uninstall
 ```sh
-wget https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/uninstall-minecraft-splitscreen.sh
+wget https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/uninstall-minecraft-splitscreen.sh
 chmod +x uninstall-minecraft-splitscreen.sh
 ./uninstall-minecraft-splitscreen.sh
 ```
 
+The uninstaller will automatically detect and remove files from both Flatpak and AppImage installations.
+
 Optional uninstall flags:
-- `--yes`
-- `--dry-run`
-- `--keep-data`
+- `--yes` - Skip confirmation prompts
+- `--dry-run` - Show what would be removed without deleting anything
+- `--keep-data` - Keep worlds, saves, and accounts (only remove launcher files and shortcuts)
 
 ## Troubleshooting
 - Connect controllers before launching.
@@ -119,6 +152,8 @@ Optional uninstall flags:
 
 ## Credits
 - Inspired by [ArnoldSmith86/minecraft-splitscreen](https://github.com/ArnoldSmith86/minecraft-splitscreen)
-- Built and maintained by [FlyingEwok](https://github.com/FlyingEwok) and contributors
-- Uses [PolyMC](https://github.com/PolyMC/PolyMC)
+- Originally created by [FlyingEwok](https://github.com/FlyingEwok) and contributors
+- Optimized for Bazzite by [LukeDlbrg](https://github.com/LukeDlbrg)
+- Uses [Prism Launcher](https://github.com/PrismLauncher/PrismLauncher) (supports both AppImage and Flatpak)
 - Uses [install-jdk-on-steam-deck](https://github.com/FlyingEwok/install-jdk-on-steam-deck) for Java setup on Steam Deck/Linux
+- Compatible with [Bazzite](https://bazzite.gg) and other handheld Linux distributions

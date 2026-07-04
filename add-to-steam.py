@@ -7,6 +7,7 @@
 # Based on the original script by ArnoldSmith86:
 # https://github.com/ArnoldSmith86/minecraft-splitscreen
 # Modified and improved for portability and clarity.
+# Updated for Prism Launcher support (AppImage and Flatpak).
 
 import os
 import re
@@ -18,22 +19,47 @@ import urllib.request
 HOME = os.path.expanduser("~")  # Get the current user's home directory
 APPNAME  = "Minecraft Splitscreen"  # Name as it will appear in Steam
 
-# Detect PolyMC paths for splitscreen gameplay.
+# Detect Prism Launcher paths for splitscreen gameplay.
 def detect_launcher():
-    """Detect PolyMC launcher for splitscreen gameplay."""
-    launcher_path = f"{HOME}/.local/share/PolyMC/PolyMC.AppImage"
-    launcher_script = f"{HOME}/.local/share/PolyMC/minecraftSplitscreen.sh"
-
-    if os.path.exists(launcher_script):
-        return launcher_script, f"{HOME}/.local/share/PolyMC", "PolyMC"
-
-    if os.path.exists(launcher_path) and os.access(launcher_path, os.X_OK):
-        print("❌ Error: PolyMC was found, but minecraftSplitscreen.sh is missing.")
+    """Detect Prism Launcher (AppImage or Flatpak) for splitscreen gameplay."""
+    
+    # 1. Check for Flatpak installation
+    flatpak_config_dir = f"{HOME}/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher"
+    flatpak_script = f"{flatpak_config_dir}/minecraftSplitscreen.sh"
+    
+    if os.path.exists(flatpak_script):
+        return flatpak_script, flatpak_config_dir, "PrismLauncher (Flatpak)"
+    
+    # 2. Check for AppImage installation
+    appimage_dir = f"{HOME}/.local/share/PrismLauncher"
+    appimage_path = f"{appimage_dir}/PrismLauncher.AppImage"
+    appimage_script = f"{appimage_dir}/minecraftSplitscreen.sh"
+    
+    if os.path.exists(appimage_script):
+        return appimage_script, appimage_dir, "PrismLauncher (AppImage)"
+    
+    if os.path.exists(appimage_path) and os.access(appimage_path, os.X_OK):
+        print("❌ Error: Prism Launcher (AppImage) was found, but minecraftSplitscreen.sh is missing.")
         print("   Re-run the installer to restore the launcher script.")
         exit(1)
-
-    print("❌ Error: PolyMC install not found!")
-    print("   Please run the Minecraft Splitscreen installer to set up PolyMC")
+    
+    # 3. Check if we're running from within a Prism Launcher directory
+    # This handles cases where the script is run from the launcher directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if "prismlauncher" in script_dir.lower() or "PrismLauncher" in script_dir:
+        # Check if this is a Flatpak config directory
+        if ".var/app/org.prismlauncher.PrismLauncher" in script_dir:
+            flatpak_script = os.path.join(script_dir, "minecraftSplitscreen.sh")
+            if os.path.exists(flatpak_script):
+                return flatpak_script, script_dir, "PrismLauncher (Flatpak)"
+        # Check if this is an AppImage directory
+        elif ".local/share/PrismLauncher" in script_dir:
+            appimage_script = os.path.join(script_dir, "minecraftSplitscreen.sh")
+            if os.path.exists(appimage_script):
+                return appimage_script, script_dir, "PrismLauncher (AppImage)"
+    
+    print("❌ Error: Prism Launcher install not found!")
+    print("   Please run the Minecraft Splitscreen installer to set up Prism Launcher")
     exit(1)
 
 EXE, STARTDIR, LAUNCHER_NAME = detect_launcher()

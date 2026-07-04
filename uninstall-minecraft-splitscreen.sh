@@ -11,19 +11,18 @@ KEEP_DATA=false
 MODE_EXPLICIT=false
 
 FULL_TARGETS=(
-    "$HOME/.local/share/PolyMC"
     "$HOME/.local/share/PrismLauncher"
+    "$HOME/.var/app/org.prismlauncher.PrismLauncher"
     "$HOME/Desktop/MinecraftSplitscreen.desktop"
     "$HOME/.local/share/applications/MinecraftSplitscreen.desktop"
 )
 
 KEEP_DATA_TARGETS=(
-    "$HOME/.local/share/PolyMC/PolyMC.AppImage"
-    "$HOME/.local/share/PolyMC/minecraftSplitscreen.sh"
-    "$HOME/.local/share/PolyMC/live.check"
-    "$HOME/.local/share/PolyMC/PolyMC-*.log"
     "$HOME/.local/share/PrismLauncher/PrismLauncher.AppImage"
     "$HOME/.local/share/PrismLauncher/minecraftSplitscreen.sh"
+    "$HOME/.local/share/PrismLauncher/live.check"
+    "$HOME/.local/share/PrismLauncher/PrismLauncher-*.log"
+    "$HOME/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher/minecraftSplitscreen.sh"
     "$HOME/Desktop/MinecraftSplitscreen.desktop"
     "$HOME/.local/share/applications/MinecraftSplitscreen.desktop"
 )
@@ -112,9 +111,9 @@ fi
 echo ""
 
 if [[ "$KEEP_DATA" == true ]]; then
-    print_info "Data under ~/.local/share/PolyMC/instances and ~/.local/share/PolyMC/accounts.json will be preserved."
+    print_info "Data under ~/.local/share/PrismLauncher/instances and ~/.local/share/PrismLauncher/accounts.json will be preserved."
 else
-    print_warning "This can remove your local instances, mods, and worlds in PolyMC/PrismLauncher."
+    print_warning "This can remove your local instances, mods, and worlds in Prism Launcher."
 fi
 print_info "Steam library shortcuts are not edited automatically."
 print_info "If needed, remove the Steam shortcut manually from Steam."

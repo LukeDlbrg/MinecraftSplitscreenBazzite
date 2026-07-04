@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Minecraft Splitscreen Steam Deck Installer - Main Workflow Module
+# Minecraft Splitscreen Bazzite & Handheld Installer - Main Workflow Module
 # =============================================================================
 # 
 # This module contains the main orchestration logic for the complete splitscreen
@@ -16,7 +16,7 @@
 #
 # INSTALLATION WORKFLOW:
 # 1. WORKSPACE SETUP: Create directories and initialize environment
-# 2. CORE SETUP: Java detection and PolyMC download
+# 2. CORE SETUP: Prism Launcher detection and setup (AppImage or Flatpak)
 # 3. VERSION DETECTION: Minecraft and Fabric version determination
 # 4. ACCOUNT SETUP: Download offline splitscreen player accounts
 # 5. MOD COMPATIBILITY: Query APIs and determine compatible mod versions
@@ -32,7 +32,8 @@
 # - Multiple validation checkpoints ensure data integrity
 #
 # LAUNCHER APPROACH:
-# The script uses PolyMC as the primary launcher for day-to-day splitscreen gameplay.
+# The script uses Prism Launcher as the primary launcher for day-to-day splitscreen gameplay.
+# Supports both AppImage and Flatpak installations.
 main() {
     # Support direct module testing calls with --debug.
     local arg
@@ -43,7 +44,8 @@ main() {
     done
 
     print_header "🎮 MINECRAFT SPLITSCREEN INSTALLER 🎮"
-    print_info "PolyMC launcher setup with manual instance creation"
+    print_info "Prism Launcher setup with manual instance creation"
+    print_info "Optimized for Bazzite and handheld devices"
     print_debug "Debug logging enabled"
     echo ""
     
@@ -63,7 +65,11 @@ main() {
     # CORE SYSTEM REQUIREMENTS VALIDATION
     # =============================================================================
     
-    download_prism_launcher        # Download PolyMC AppImage for splitscreen launcher usage
+    # Only download Prism Launcher AppImage if using AppImage mode
+    # For Flatpak, it's already installed via flatpak
+    if [[ "$LAUNCHER_TYPE" == "prism-appimage" ]]; then
+        download_prism_launcher        # Download Prism Launcher AppImage for splitscreen launcher usage
+    fi
     
     # =============================================================================
     # VERSION DETECTION AND CONFIGURATION
@@ -71,7 +77,7 @@ main() {
     
     get_minecraft_version         # Determine target Minecraft version (user choice or latest)
     detect_java                   # Automatically detect, install, and configure correct Java version for selected Minecraft version
-    configure_polymc_defaults     # Write launcher defaults so Quick Setup wizard is skipped
+    configure_prism_defaults     # Write launcher defaults so Quick Setup wizard is skipped
     get_fabric_version           # Get compatible Fabric loader version from API
     get_lwjgl_version            # Detect appropriate LWJGL version for Minecraft version
     
@@ -85,7 +91,7 @@ main() {
     # OFFLINE ACCOUNTS DOWNLOAD: Get splitscreen player account configurations
     # These accounts enable splitscreen without requiring multiple Microsoft accounts
     # Each player (P1, P2, P3, P4) gets a separate offline profile for identification
-    if ! wget -O accounts.json "https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/accounts.json"; then
+    if ! wget -O accounts.json "https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/accounts.json"; then
         print_warning "⚠️  Failed to download accounts.json from repository"
         print_info "   → Attempting to use local copy if available..."
         if [[ ! -f "accounts.json" ]]; then
@@ -150,7 +156,16 @@ main() {
     # =============================================================================
     
     echo "✅ Installation successful"
-    echo "Launcher: PolyMC"
+    
+    # Determine launcher type for display
+    local launcher_display="Prism Launcher"
+    if [[ "$LAUNCHER_TYPE" == "prism-flatpak" ]]; then
+        launcher_display="Prism Launcher (Flatpak)"
+    elif [[ "$LAUNCHER_TYPE" == "prism-appimage" ]]; then
+        launcher_display="Prism Launcher (AppImage)"
+    fi
+    
+    echo "Launcher: $launcher_display"
     echo "Instances: 4 (latestUpdate-1 to latestUpdate-4)"
     echo ""
     echo "Run: $TARGET_DIR/minecraftSplitscreen.sh"
@@ -159,13 +174,14 @@ main() {
         echo ""
         echo "Debug details"
         echo "- Installation dir: $TARGET_DIR"
-        echo "- Launcher executable: $TARGET_DIR/PolyMC.AppImage"
+        echo "- Launcher type: $LAUNCHER_TYPE"
+        echo "- Launcher executable: ${LAUNCHER_EXEC:-not set}"
         echo "- Instances dir: $TARGET_DIR/instances/"
         echo "- Accounts file: $TARGET_DIR/accounts.json"
     fi
 
     echo ""
     echo "For troubleshooting or updates, visit:"
-    echo "https://github.com/FlyingEwok/MinecraftSplitscreenSteamdeck"
+    echo "https://github.com/LukeDlbrg/MinecraftSplitscreenBazzite"
     echo "=========================================="
 }

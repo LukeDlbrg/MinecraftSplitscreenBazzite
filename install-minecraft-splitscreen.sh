@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
-# Minecraft Splitscreen Steam Deck Installer - MODULAR VERSION
+# Minecraft Splitscreen Bazzite & Handheld Installer - MODULAR VERSION
 # =============================================================================
 # 
-# This is the new, clean modular entry point for the Minecraft Splitscreen installer.
+# This is the modular entry point for the Minecraft Splitscreen installer.
 # All functionality has been moved to organized modules for better maintainability.
 # Required modules are automatically downloaded as temporary files when the script runs.
 #
@@ -14,8 +14,9 @@
 # - API filtering for Fabric-compatible mods (Modrinth + CurseForge)
 # - Enhanced error handling with multiple fallback mechanisms
 # - User-friendly mod selection interface
-# - Steam Deck optimized installation
-# - Comprehensive Steam and desktop integration
+# - Bazzite and handheld optimized installation
+# - Prism Launcher support (AppImage or Flatpak)
+# - Comprehensive Steam and desktop integration (optional)
 #
 # No additional setup, Java installation, token files, or module downloads required - just run this script.
 # Modules are downloaded temporarily and automatically cleaned up when the script completes.
@@ -26,6 +27,7 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Runtime flags
 DEBUG_MODE=false
+LAUNCHER_TYPE="auto"
 
 # Parse installer flags early so startup/module logs can respect debug mode.
 declare -a FORWARDED_ARGS=()
@@ -33,6 +35,12 @@ for arg in "$@"; do
     case "$arg" in
         --debug)
             DEBUG_MODE=true
+            ;;
+        --launcher)
+            # Next argument should be the launcher type
+            ;;
+        flatpak|appimage|auto)
+            LAUNCHER_TYPE="$arg"
             ;;
         *)
             FORWARDED_ARGS+=("$arg")
@@ -69,7 +77,169 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULES_DIR="$(mktemp -d -t minecraft-modules-XXXXXX)"
 
 # GitHub repository information (modify these URLs to match your actual repository)
-readonly REPO_BASE_URL="https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/modules"
+readonly REPO_BASE_URL="https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/modules"
+
+# =============================================================================
+# LAUNCHER TYPE DETECTION AND CONFIGURATION
+# =============================================================================
+
+# detect_prism_launcher: Detects if Prism Launcher is installed (Flatpak or AppImage)
+# Sets global variables: LAUNCHER_TYPE, LAUNCHER_EXEC, TARGET_DIR
+detect_prism_launcher() {
+    # Check for Flatpak installation
+    if command -v flatpak >/dev/null 2>&1; then
+        if flatpak list | grep -q "org.prismlauncher.PrismLauncher"; then
+            LAUNCHER_TYPE="prism-flatpak"
+            LAUNCHER_EXEC="flatpak run org.prismlauncher.PrismLauncher"
+            TARGET_DIR="$HOME/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher"
+            print_success "Detected Prism Launcher (Flatpak) at $TARGET_DIR"
+            return 0
+        fi
+    fi
+
+    # Check for AppImage installation
+    local appimage_path="$HOME/.local/share/PrismLauncher/PrismLauncher.AppImage"
+    if [[ -f "$appimage_path" ]] && [[ -x "$appimage_path" ]]; then
+        LAUNCHER_TYPE="prism-appimage"
+        LAUNCHER_EXEC="$appimage_path"
+        TARGET_DIR="$HOME/.local/share/PrismLauncher"
+        print_success "Detected Prism Launcher (AppImage) at $TARGET_DIR"
+        return 0
+    fi
+
+    # Not found
+    return 1
+}
+
+# select_launcher_type: Allows user to select launcher installation type
+select_launcher_type() {
+    echo ""
+    print_header "🎮 PRISM LAUNCHER SELECTION"
+    print_info "Prism Launcher is required for Minecraft Splitscreen."
+    print_info "You can use an existing installation or have the installer set one up."
+    echo ""
+
+    if detect_prism_launcher; then
+        print_info "Using detected Prism Launcher installation (type: $LAUNCHER_TYPE)"
+        echo ""
+        read -p "Use detected installation? [Y/n]: " use_detected
+        if [[ "$use_detected" =~ ^[Nn]$ ]]; then
+            # User wants to choose differently
+            LAUNCHER_TYPE=""
+        else
+            return 0
+        fi
+    fi
+
+    echo ""
+    print_info "Select Prism Launcher installation type:"
+    echo "  1) Flatpak (recommended for Bazzite) - will be installed automatically if missing"
+    echo "  2) AppImage - will be downloaded and installed locally"
+    echo ""
+
+    local choice=""
+    while [[ -z "$choice" ]]; do
+        read -p "Select option [1-2, default=1]: " choice
+        case "$choice" in
+            1|""|flatpak)
+                LAUNCHER_TYPE="prism-flatpak"
+                ;;
+            2|appimage)
+                LAUNCHER_TYPE="prism-appimage"
+                ;;
+            *)
+                echo "Invalid option. Please select 1 or 2."
+                choice=""
+                ;;
+        esac
+    done
+
+    return 0
+}
+
+# setup_prism_launcher: Ensures Prism Launcher is installed based on LAUNCHER_TYPE
+setup_prism_launcher() {
+    case "$LAUNCHER_TYPE" in
+        prism-flatpak)
+            setup_prism_flatpak
+            ;;
+        prism-appimage)
+            setup_prism_appimage
+            ;;
+        auto)
+            if ! detect_prism_launcher; then
+                print_info "No Prism Launcher detected. Selecting installation type..."
+                select_launcher_type
+                setup_prism_launcher
+            fi
+            ;;
+    esac
+}
+
+# setup_prism_flatpak: Install Prism Launcher via Flatpak
+setup_prism_flatpak() {
+    print_progress "Setting up Prism Launcher via Flatpak..."
+
+    # Check if flatpak is available
+    if ! command -v flatpak >/dev/null 2>&1; then
+        print_error "Flatpak is not installed. Cannot install Prism Launcher via Flatpak."
+        print_info "Please install flatpak first or choose AppImage installation."
+        exit 1
+    fi
+
+    # Add Flathub repository if not already added
+    if ! flatpak remotes | grep -q "flathub"; then
+        print_progress "Adding Flathub repository..."
+        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    fi
+
+    # Install Prism Launcher if not already installed
+    if ! flatpak list | grep -q "org.prismlauncher.PrismLauncher"; then
+        print_progress "Installing Prism Launcher from Flathub..."
+        flatpak install flathub org.prismlauncher.PrismLauncher -y --noninteractive
+    fi
+
+    # Set paths for Flatpak installation
+    LAUNCHER_EXEC="flatpak run org.prismlauncher.PrismLauncher"
+    TARGET_DIR="$HOME/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher"
+    print_success "Prism Launcher (Flatpak) is ready at $TARGET_DIR"
+}
+
+# setup_prism_appimage: Download and setup Prism Launcher AppImage
+setup_prism_appimage() {
+    print_progress "Setting up Prism Launcher via AppImage..."
+
+    # Create target directory
+    mkdir -p "$HOME/.local/share/PrismLauncher"
+    TARGET_DIR="$HOME/.local/share/PrismLauncher"
+
+    # Download latest Prism Launcher AppImage
+    local prism_url
+    prism_url=$(curl -s https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest | \
+        jq -r '.assets[] | select(.name | ascii_downcase | (contains("appimage") and (contains("x86_64") or contains("amd64")))) | .browser_download_url' | \
+        head -n1)
+
+    if [[ -z "$prism_url" || "$prism_url" == "null" ]]; then
+        print_error "Could not find latest Prism Launcher AppImage URL."
+        print_error "Please check https://github.com/PrismLauncher/PrismLauncher/releases manually."
+        exit 1
+    fi
+
+    print_progress "Downloading Prism Launcher AppImage..."
+    local appimage_path="$TARGET_DIR/PrismLauncher.AppImage"
+    if command -v wget >/dev/null 2>&1; then
+        wget -O "$appimage_path" "$prism_url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -o "$appimage_path" "$prism_url"
+    else
+        print_error "Neither wget nor curl is available to download Prism Launcher."
+        exit 1
+    fi
+
+    chmod +x "$appimage_path"
+    LAUNCHER_EXEC="$appimage_path"
+    print_success "Prism Launcher (AppImage) downloaded to $appimage_path"
+}
 
 # List of required module files
 readonly MODULE_FILES=(
@@ -165,7 +335,7 @@ download_modules() {
         echo "    mkdir -p '$SCRIPT_DIR/modules'"
         echo "    # Then copy all .sh module files to that directory"
         echo ""
-        echo "🌐 Or check if the repository exists at: https://github.com/FlyingEwok/MinecraftSplitscreenSteamdeck"
+        echo "🌐 Or check if the repository exists at: https://github.com/LukeDlbrg/MinecraftSplitscreenBazzite"
         exit 1
     fi
     
@@ -216,7 +386,8 @@ source "$MODULES_DIR/main_workflow.sh"
 # =============================================================================
 
 # Script configuration paths
-readonly TARGET_DIR="$HOME/.local/share/PolyMC"
+# TARGET_DIR will be set by launcher detection/setup
+TARGET_DIR=""
 
 # Runtime variables (set during execution)
 JAVA_PATH=""
@@ -261,9 +432,24 @@ declare -a MISSING_MODS=()
 # SCRIPT ENTRY POINT
 # =============================================================================
 
-# Execute main function if script is run directly
-# This allows the script to be sourced for testing without auto-execution
+# Setup Prism Launcher before running main
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]] && [[ -z "${TESTING_MODE:-}" ]]; then
+    # Handle launcher type selection
+    if [[ "$LAUNCHER_TYPE" == "auto" ]]; then
+        if ! detect_prism_launcher; then
+            select_launcher_type
+        fi
+    fi
+    
+    setup_prism_launcher
+    
+    # Ensure TARGET_DIR is set
+    if [[ -z "$TARGET_DIR" ]]; then
+        print_error "TARGET_DIR not set. Prism Launcher setup failed."
+        exit 1
+    fi
+    
+    # Execute main function
     main "$@"
 fi
 

@@ -3,44 +3,82 @@
 set +e  # Allow script to continue on errors for robustness
 
 # =============================
-# Minecraft Splitscreen Launcher for Steam Deck & Linux
+# Minecraft Splitscreen Launcher for Bazzite & Handhelds
 # =============================
 # This script launches 1–4 Minecraft instances in splitscreen mode.
-# On Steam Deck Game Mode, it launches a nested KDE Plasma session for clean splitscreen.
+# On Bazzite/Steam Deck Game Mode, it handles controller detection and per-instance mod config.
 # On desktop mode, it launches Minecraft instances directly.
-# Handles controller detection, per-instance mod config, KDE panel hiding/restoring, and reliable autostart in a nested session.
+# Handles controller detection, per-instance mod config, KDE panel hiding/restoring, and reliable autostart.
 #
 # HOW IT WORKS:
-# 1. If in Steam Deck Game Mode, launches a nested Plasma Wayland session (if not already inside).
-# 2. Sets up an autostart .desktop file to re-invoke itself inside the nested session.
-# 3. Detects how many controllers are connected (1–4, with Steam Input quirks handled).
-# 4. For each player, writes the correct splitscreen mod config and launches a Minecraft instance.
-# 5. Hides KDE panels for a clean splitscreen experience (by killing plasmashell), then restores them.
-# 6. Logs out of the nested session when done.
+# 1. Detects the launcher (Prism Launcher AppImage or Flatpak).
+# 2. On Bazzite/Steam Deck Game Mode, detects controllers (1–4).
+# 3. For each player, writes the correct splitscreen mod config and launches a Minecraft instance.
+# 4. Hides KDE panels for a clean splitscreen experience (by killing plasmashell), then restores them.
+# 5. On Bazzite, no nested session is needed as it already runs in a proper Wayland/Plasma environment.
 #
 # NOTE: This script is robust and heavily commented for clarity and future maintainers!
 # The main script file should be named minecraftSplitscreen.sh for clarity and version-agnostic usage.
 
 # Set a temporary directory for intermediate files (used for wrappers, etc)
 export target=/tmp
-LAUNCH_DEBUG_LOG="$HOME/.local/share/PolyMC/splitscreen-launch-debug.log"
+
+# Determine the base directory based on where this script is located
+# For Flatpak, this will be in the Flatpak config directory
+# For AppImage, this will be in ~/.local/share/PrismLauncher/
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCH_DEBUG_LOG="$SCRIPT_DIR/splitscreen-launch-debug.log"
 
 # =============================
 # Function: detectLauncher
 # =============================
-# Detects PolyMC launcher for splitscreen gameplay.
+# Detects Prism Launcher (AppImage or Flatpak) for splitscreen gameplay.
 # Returns launcher paths and executable info.
 detectLauncher() {
-    # Check if PolyMC is available.
-    if [ -f "$HOME/.local/share/PolyMC/PolyMC.AppImage" ] && [ -x "$HOME/.local/share/PolyMC/PolyMC.AppImage" ]; then
-        export LAUNCHER_DIR="$HOME/.local/share/PolyMC"
-        export LAUNCHER_EXEC="$HOME/.local/share/PolyMC/PolyMC.AppImage"
-        export LAUNCHER_NAME="PolyMC"
+    # Check for Flatpak installation first
+    if command -v flatpak >/dev/null 2>&1; then
+        if flatpak list | grep -q "org.prismlauncher.PrismLauncher"; then
+            export LAUNCHER_DIR="$HOME/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher"
+            export LAUNCHER_EXEC="flatpak run org.prismlauncher.PrismLauncher"
+            export LAUNCHER_NAME="PrismLauncher (Flatpak)"
+            return 0
+        fi
+    fi
+
+    # Check for AppImage installation
+    if [ -f "$HOME/.local/share/PrismLauncher/PrismLauncher.AppImage" ] && [ -x "$HOME/.local/share/PrismLauncher/PrismLauncher.AppImage" ]; then
+        export LAUNCHER_DIR="$HOME/.local/share/PrismLauncher"
+        export LAUNCHER_EXEC="$HOME/.local/share/PrismLauncher/PrismLauncher.AppImage"
+        export LAUNCHER_NAME="PrismLauncher (AppImage)"
         return 0
     fi
+
+    # Check if this script is in a Prism Launcher directory (for Flatpak)
+    local possible_dirs=(
+        "$HOME/.var/app/org.prismlauncher.PrismLauncher/config/prismlauncher"
+        "$HOME/.local/share/PrismLauncher"
+    )
     
-    echo "[Error] PolyMC not found at $HOME/.local/share/PolyMC/" >&2
-    echo "[Error] Please run the Minecraft Splitscreen installer to set up PolyMC" >&2
+    for dir in "${possible_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            export LAUNCHER_DIR="$dir"
+            
+            # Try to find the executable
+            if [ -f "$dir/PrismLauncher.AppImage" ]; then
+                export LAUNCHER_EXEC="$dir/PrismLauncher.AppImage"
+                export LAUNCHER_NAME="PrismLauncher (AppImage)"
+                return 0
+            fi
+            
+            # For Flatpak, the executable is via flatpak run
+            export LAUNCHER_EXEC="flatpak run org.prismlauncher.PrismLauncher"
+            export LAUNCHER_NAME="PrismLauncher (Flatpak)"
+            return 0
+        fi
+    done
+    
+    echo "[Error] Prism Launcher not found" >&2
+    echo "[Error] Please run the Minecraft Splitscreen installer to set up Prism Launcher" >&2
     return 1
 }
 
@@ -50,14 +88,22 @@ if ! detectLauncher; then
     exit 1
 fi
 
+# Ensure instances directory exists
+if [ ! -d "$LAUNCHER_DIR/instances" ]; then
+    echo "[Error] Instances directory not found at $LAUNCHER_DIR/instances" >&2
+    echo "[Error] Please run the Minecraft Splitscreen installer first" >&2
+    exit 1
+fi
+
 echo "[Info] Using $LAUNCHER_NAME for splitscreen gameplay"
+echo "[Info] Instances directory: $LAUNCHER_DIR/instances"
 
 # =============================
 # Function: selfUpdate
 # =============================
 # Checks if this script is the latest version from GitHub. If not, downloads and replaces itself.
 selfUpdate() {
-    local repo_url="https://raw.githubusercontent.com/FlyingEwok/MinecraftSplitscreenSteamdeck/main/minecraftSplitscreen.sh"
+    local repo_url="https://raw.githubusercontent.com/LukeDlbrg/MinecraftSplitscreenBazzite/main/minecraftSplitscreen.sh"
     local tmpfile
     tmpfile=$(mktemp)
     local script_path
@@ -114,6 +160,15 @@ fi
 # Needed so Minecraft can run in a clean, isolated desktop environment (avoiding SteamOS overlays, etc).
 # The autostart .desktop file ensures Minecraft launches automatically inside the nested session.
 nestedPlasma() {
+    # Check if we're on Bazzite - if so, no nested session needed
+    if isBazziteEnvironment; then
+        echo "[Info] Bazzite detected - no nested session needed"
+        # On Bazzite, we can launch directly
+        launchGames
+        exit 0
+    fi
+    
+    # For Steam Deck (non-Bazzite) or other systems, use nested Plasma
     # Unset variables that may interfere with launching a nested session
     unset LD_PRELOAD XDG_DESKTOP_PORTAL_DIR XDG_SEAT_PATH XDG_SESSION_PATH
     # Get current screen resolution (e.g., 1280x800)
@@ -223,21 +278,21 @@ launchGame() {
     fi
 }
 
-# Kill PolyMC frontend wrapper processes without touching running Java game processes.
+# Kill Prism Launcher frontend wrapper processes without touching running Java game processes.
 pruneLauncherFrontends() {
     local reason="${1:-manual}"
     local launcher_pids=""
     local left_after=""
 
-    launcher_pids="$(pgrep -f 'AppRun\.wrapped|PolyMC\.AppImage|kde-inhibit.*PolyMC' 2>/dev/null || true)"
+    launcher_pids="$(pgrep -f 'AppRun\.wrapped|PrismLauncher\.AppImage|kde-inhibit.*PrismLauncher' 2>/dev/null || true)"
     if [ -n "$launcher_pids" ]; then
         {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Prune launcher frontends (${reason})"
-            pgrep -af 'AppRun\.wrapped|PolyMC\.AppImage|kde-inhibit.*PolyMC' 2>/dev/null || true
+            pgrep -af 'AppRun\.wrapped|PrismLauncher\.AppImage|kde-inhibit.*PrismLauncher' 2>/dev/null || true
         } >> "$LAUNCH_DEBUG_LOG"
         kill $launcher_pids 2>/dev/null || true
         sleep 1
-        left_after="$(pgrep -f 'AppRun\.wrapped|PolyMC\.AppImage|kde-inhibit.*PolyMC' 2>/dev/null || true)"
+        left_after="$(pgrep -f 'AppRun\.wrapped|PrismLauncher\.AppImage|kde-inhibit.*PrismLauncher' 2>/dev/null || true)"
         if [ -n "$left_after" ]; then
             kill -9 $left_after 2>/dev/null || true
             sleep 0.5
@@ -246,7 +301,7 @@ pruneLauncherFrontends() {
 
     {
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Frontends after prune (${reason})"
-        pgrep -af 'AppRun\.wrapped|PolyMC\.AppImage|kde-inhibit.*PolyMC' 2>/dev/null || echo "  <none>"
+        pgrep -af 'AppRun\.wrapped|PrismLauncher\.AppImage|kde-inhibit.*PrismLauncher' 2>/dev/null || echo "  <none>"
     } >> "$LAUNCH_DEBUG_LOG"
 }
 
@@ -298,7 +353,7 @@ getControllerDevices() {
     fi
 }
 
-# Upsert a key/value in a PolyMC instance.cfg file.
+# Upsert a key/value in a Prism Launcher instance.cfg file.
 setInstanceCfgValue() {
     local cfg_path="$1"
     local key="$2"
@@ -519,10 +574,41 @@ launchGames() {
 }
 
 # =============================
+# Function: isBazziteEnvironment
+# =============================
+# Returns 0 if running on Bazzite, 1 otherwise.
+# Bazzite is a SteamOS-like distribution for handheld devices.
+# Note: Installation always happens in desktop mode, so we only check for desktop indicators
+isBazziteEnvironment() {
+    # 1. Primary: Check /etc/os-release for Bazzite
+    if [ -f "/etc/os-release" ] && grep -Ei 'Bazzite|bazzite' /etc/os-release >/dev/null; then
+        return 0
+    fi
+    
+    # 2. Fallback: Check XDG_SESSION_DESKTOP
+    if [ "${XDG_SESSION_DESKTOP:-}" = "bazzite" ]; then
+        return 0
+    fi
+    
+    # 3. Fallback: Check for bazzite-session process
+    if pgrep -x 'bazzite-session' >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# =============================
 # Function: isSteamDeckGameMode
 # =============================
 # Returns 0 if running on Steam Deck in Game Mode, 1 otherwise.
+# This is for non-Bazzite Steam Deck installations.
 isSteamDeckGameMode() {
+    # If we're on Bazzite, this is not Steam Deck Game Mode
+    if isBazziteEnvironment; then
+        return 1
+    fi
+    
     local dmi_file="/sys/class/dmi/id/product_name"
     local dmi_contents=""
     if [ -f "$dmi_file" ]; then
@@ -551,7 +637,10 @@ isSteamDeckGameMode() {
 # =============================
 # Always remove the autostart file on script exit to prevent unwanted autostart on boot
 cleanup_autostart() {
-    rm -f "$HOME/.config/autostart/minecraft-launch.desktop"
+    # Only clean up if we're not on Bazzite (Bazzite doesn't need nested sessions)
+    if ! isBazziteEnvironment; then
+        rm -f "$HOME/.config/autostart/minecraft-launch.desktop"
+    fi
 }
 trap cleanup_autostart EXIT
 
@@ -559,8 +648,13 @@ trap cleanup_autostart EXIT
 # =============================
 # MAIN LOGIC: Entry Point
 # =============================
-# Universal: Steam Deck Game Mode = nested KDE, else just launch on current desktop
-if isSteamDeckGameMode; then
+# Bazzite: Direct launch (no nested session needed)
+# Steam Deck Game Mode: nested KDE
+# Desktop: Direct launch
+if isBazziteEnvironment; then
+    # On Bazzite, launch directly
+    launchGames
+elif isSteamDeckGameMode; then
     if [ "$1" = launchFromPlasma ]; then
         # Inside nested Plasma session: launch Minecraft splitscreen and logout when done
         rm ~/.config/autostart/minecraft-launch.desktop
@@ -572,7 +666,7 @@ if isSteamDeckGameMode; then
     fi
 else
     # Not in Game Mode: just launch Minecraft instances directly
-    local -a controller_devices
+    controller_devices=()
     numberOfControllers=$(getControllerCount)
     mapfile -t controller_devices < <(getControllerDevices)
     if [ "${#controller_devices[@]}" -gt 0 ]; then
@@ -587,7 +681,7 @@ else
     fi
 
     for player in $(seq 1 $numberOfControllers); do
-        local joystick_device=""
+        joystick_device=""
         if [ "$player" -le "${#controller_devices[@]}" ]; then
             joystick_device="${controller_devices[$((player-1))]}"
         fi
